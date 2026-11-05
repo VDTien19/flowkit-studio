@@ -1,5 +1,21 @@
 # fk-pipeline — Smart Full-Pipeline Orchestrator
 
+Configuration pre-flight: read `docs/AUTOMATION.md` and `GET /api/flow/status`.
+Use the effective `flow_project_id` from the running backend, never an old ID
+from a plan. The user sets the destination in `flowkit-settings.ps1` and restarts
+with `start-flowkit.ps1`. Keep local film UUIDs in queue/management APIs; direct
+Flow calls omit the target or use the effective ID. Never create Google projects
+or override the configured target.
+
+
+Read `docs/AUTOMATION.md` before running. An idea starts planning only.
+Require the current local project's persisted plan approval after the user's DUY?T.
+Without approval, do not generate references, images, videos, music or TTS.
+After approval, continue through final MP4 without repeated routine questions.
+Never create/switch Google projects; all Flow tasks use the pinned ID.
+Do not notify or publish unless separately authorized.
+
+
 Auto-detect project state and run the correct stages (continuation or full run). Handles batching, parallelism, retries, downloads, TTS, and Telegram notifications.
 
 Usage: `/fk-pipeline [project_id] [orientation] [options]`

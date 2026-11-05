@@ -22,10 +22,10 @@ WS_PORT = int(os.environ.get("WS_PORT", "9222"))
 # is the only transport; the REST path it replaced was removed once Flow stopped
 # minting the bearer it needed.
 
-# The Flow project every RPC is scoped to. Project creation went with the old
-# labs.google tRPC endpoint, so a project is made once in the Flow UI and its
-# uuid pinned here; POST /api/projects falls back to it when no id is given.
-FLOW_PROJECT_ID = os.environ.get("FLOW_PROJECT_ID", "")
+# Google destination only, independent of local film primary keys.
+# Loaded from flowkit-settings.ps1 by start-flowkit.ps1; no built-in fallback.
+# POST /api/projects always creates local records, never Google projects.
+FLOW_PROJECT_ID = os.environ.get("FLOW_PROJECT_ID", "").strip().lower()
 
 # Capabilities whose payloads were never captured off the new UI (4K upscale,
 # reference-to-video, start+end-frame chaining) fail loudly by default. With

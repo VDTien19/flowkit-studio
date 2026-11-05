@@ -329,6 +329,23 @@ class FlowProvider(MediaProvider):
     # ── MediaProvider interface ──────────────────────────────────────────
 
     async def run(self, job: ProviderJob) -> dict:
+        from dataclasses import replace
+        from agent.services.automation_policy import (
+            require_approval, approved_project, flow_target, PolicyError,
+        )
+        local_pid = job.extra.get("project_id")
+        try:
+            require_approval(local_pid)
+            target = flow_target(job.extra.get("flow_project_id"))
+        except PolicyError as exc:
+            return {"status": 409, "error": str(exc)}
+        token = approved_project.set(local_pid)
+        try:
+            return await self._run_approved(replace(job, extra={**job.extra, "project_id": target}))
+        finally:
+            approved_project.reset(token)
+
+    async def _run_approved(self, job: ProviderJob) -> dict:
         if job.kind == KIND_IMAGE:
             return await self._run_image(job)
         if job.kind == KIND_EDIT_IMAGE:
@@ -352,6 +369,8 @@ class FlowProvider(MediaProvider):
     async def register_existing_image(
         self, url: str, *, name: str = "", project_id: str = ""
     ) -> dict:
+        from agent.services.automation_policy import flow_target
+        project_id = flow_target()
         mid = await _upload_character_image(
             self._client, {"name": name, "reference_image_url": url}, project_id
         )

@@ -10,8 +10,8 @@ from starlette.datastructures import Headers, UploadFile
 from agent.api import flow as flow_api
 
 
-PROJECT = "11111111-2222-3333-4444-555555555555"
-SESSION_PROJECT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+PROJECT = "b29b7ca7-17c0-4bde-ade8-c7f458bc2625"
+SESSION_PROJECT = PROJECT
 MEDIA = "99999999-8888-7777-6666-555555555555"
 IMAGE = b"\x89PNG\r\n\x1a\nflowkit-test-image"
 
@@ -107,7 +107,7 @@ async def test_private_tmp_like_invisible_path_returns_descriptive_404(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_session_project_auto_creation_then_base64_upload(monkeypatch):
+async def test_pinned_project_without_session_creation_then_base64_upload(monkeypatch):
     client = FakeFlowClient()
     monkeypatch.setattr(flow_api, "get_flow_client", lambda: client)
     calls = []
@@ -125,7 +125,7 @@ async def test_session_project_auto_creation_then_base64_upload(monkeypatch):
         )
     )
 
-    assert calls == [client]
+    assert calls == []  # no session creation or rotation
     assert result["project_id"] == SESSION_PROJECT
     assert client.uploads[0]["project_id"] == SESSION_PROJECT
 

@@ -106,14 +106,13 @@ Camera stays behind. Viewers see the leader's power through body language, not f
 
 ## Step 0: Project lifecycle
 
-FlowKit can create real Flow projects through the current `jHPbke`
-`batchexecute` RPC. `POST /api/projects` creates a fresh Flow project when
-`flow_project_id` is omitted. Pass `flow_project_id` only when intentional
-reuse of an existing Flow project is required.
-
-Ad-hoc `/api/flow/*` calls may omit `project_id`; FlowKit then uses a persistent
-session project. The session survives agent restarts and rotates after 2 hours
-of inactivity by default (`FLOW_SESSION_PROJECT_IDLE_S`).
+Read `docs/AUTOMATION.md` first. Only local film projects may be created.
+Read `/api/flow/status` for the effective `flow_project_id`, loaded from
+`flowkit-settings.ps1` by `start-flowkit.ps1` on restart. Never reuse an ID from
+a previous plan or this document. Omit `flow_project_id` or pass the effective ID;
+a different override fails. Only the user selects a new target in the settings file.
+Local projects receive independent UUIDs. Session never rotates or creates projects.
+Do not submit media until the user approves the presented plan with DUY?T.
 
 ```bash
 curl -s http://127.0.0.1:8100/api/flow/status | python3 -c "
@@ -125,8 +124,7 @@ print('Session project:', s.get('session_project'))
 
 ## Step 1: Create project with all entities
 
-Omit `flow_project_id` for a fresh Flow project. Supply it only for deliberate
-reuse of a known project.
+Omit `flow_project_id` to create a local film record; Google target stays pinned.
 
 ```bash
 curl -X POST http://127.0.0.1:8100/api/projects \

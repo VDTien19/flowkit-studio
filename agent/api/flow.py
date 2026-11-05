@@ -5,9 +5,10 @@ import mimetypes
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 from typing import Any, Literal, Optional
+from agent import config as _config
 
 from agent.config import (
-    FLOW_PROJECT_ID, FLOW_ALLOW_DEGRADED,
+    FLOW_ALLOW_DEGRADED,
     FLOW_GENERATION_MIN_INTERVAL_S, FLOW_GENERATION_MAX_CONCURRENT,
     FLOW_UNUSUAL_ACTIVITY_COOLDOWN_S,
 )
@@ -120,7 +121,7 @@ class UploadImageRequest(BaseModel):
     )
     project_id: str = Field(
         default="",
-        description="Existing Flow project id, or empty to use/create the session project.",
+        description="Existing Flow project id, or empty to use the pinned project.",
     )
     file_name: str = Field(default="image.png", description="Filename sent to Google Flow.")
 
@@ -160,17 +161,11 @@ class UpscaleImageRequest(BaseModel):
 
 
 async def _resolve_direct_project(client, project_id: str) -> str:
-    pid = str(project_id or "").strip()
-    if pid:
-        return pid
+    from agent.services.automation_policy import flow_target, PolicyError
     try:
-        session = await ensure_session_project(client)
-    except Exception as exc:
-        raise HTTPException(502, f"Could not create Flow session project: {exc}") from exc
-    pid = str(session.get("project_id") or "")
-    if not pid:
-        raise HTTPException(502, "Flow session project did not return an id")
-    return pid
+        return flow_target(project_id)
+    except PolicyError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/status")
@@ -186,7 +181,7 @@ async def extension_status():
         # One transport now. The key stays so the documented pre-flight check
         # (CLAUDE.md) keeps reading {"transport": "batch", ...}.
         "transport": "batch",
-        "flow_project_id": FLOW_PROJECT_ID or None,
+        "flow_project_id": _config.FLOW_PROJECT_ID or None,
         "allow_degraded": FLOW_ALLOW_DEGRADED,
         "flow_key_present": client._flow_key is not None,
         "generation_throttle": {
@@ -500,10 +495,11 @@ async def edit_image(body: EditImageRequest):
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
+    project_id = await _resolve_direct_project(client, body.project_id)
     result = await client.edit_image(
         body.prompt,
         body.source_media_id,
-        body.project_id,
+        project_id,
         aspect_ratio=body.aspect_ratio,
         user_paygate_tier=body.user_paygate_tier,
         character_media_ids=body.reference_media_ids,
@@ -526,9 +522,10 @@ async def export_image(body: UpscaleImageRequest):
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
+    project_id = await _resolve_direct_project(client, body.project_id)
     result = await client.upscale_image(
         body.media_id,
-        body.project_id,
+        project_id,
         resolution=body.quality.upper(),
     )
     if result.get("error") or (isinstance(result.get("status"), int) and result["status"] >= 400):
@@ -661,15 +658,15 @@ async def upload_image(body: UploadImageRequest):
     description=(
         "Recommended direct-file endpoint for external callers. The uploaded bytes are "
         "read from the HTTP request, so the caller does not need to share a filesystem "
-        "namespace with the FlowKit service. Leave project_id empty to use/create the "
-        "session project."
+        "namespace with the FlowKit service. Leave project_id empty to use the "
+        "pinned Google Flow project; no project is created."
     ),
 )
 async def upload_image_file(
     file: UploadFile = File(..., description="Image file bytes from the caller."),
     project_id: str = Form(
         default="",
-        description="Existing Flow project id, or empty to use/create the session project.",
+        description="Existing Flow project id, or empty to use the pinned project.",
     ),
     file_name: Optional[str] = Form(
         default=None,
@@ -715,11 +712,12 @@ async def debug_cache():
 
 
 @router.get("/debug-listing/{operation_id}")
-async def debug_listing(operation_id: str, project_id: str = "594758cc-11f5-4f92-8b3c-1213686591f4"):
+async def debug_listing(operation_id: str, project_id: str = ""):
     import agent.services.flow_batch as fb
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
+    project_id = await _resolve_direct_project(client, project_id)
     result = await client.batch_rpc(
         fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
         match=operation_id, timeout=30,
@@ -734,12 +732,13 @@ async def debug_listing(operation_id: str, project_id: str = "594758cc-11f5-4f92
 
 
 @router.get("/debug-project-media")
-async def debug_project_media(project_id: str = "594758cc-11f5-4f92-8b3c-1213686591f4"):
+async def debug_project_media(project_id: str = ""):
     import re
     import agent.services.flow_batch as fb
     client = get_flow_client()
     if not client.connected:
         raise HTTPException(503, "Extension not connected")
+    project_id = await _resolve_direct_project(client, project_id)
     result = await client.batch_rpc(
         fb.RPC_PROJECT_MEDIA, fb.project_media_request(project_id),
         match=None, timeout=60,

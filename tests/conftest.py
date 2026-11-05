@@ -3,6 +3,26 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def isolated_automation_policy(tmp_path, monkeypatch):
+    """Tests never inherit machine project IDs or write real plan approvals."""
+    from agent import config
+    from agent.services import automation_policy as policy
+    monkeypatch.setattr(config, "FLOW_PROJECT_ID", "b29b7ca7-17c0-4bde-ade8-c7f458bc2625")
+    monkeypatch.setattr(policy, "PLAN_DB_PATH", tmp_path / "plans.db")
+
+
+@pytest.fixture
+def approved_test_plan(isolated_automation_policy):
+    from agent.services import automation_policy as policy
+    pid = "proj-001"
+    plan = policy.save_plan(pid, {"story": "unit test only", "scenes": 1})
+    policy.approve_plan(pid, plan["revision"], "DUYỆT")
+    token = policy.approved_project.set(pid)
+    yield pid
+    policy.approved_project.reset(token)
+
+
 @pytest.fixture
 def sample_uuid():
     return "550e8400-e29b-41d4-a716-446655440000"

@@ -6,6 +6,13 @@ from agent.services import flow_batch as fb
 from agent.services import flow_client as fc
 
 
+@pytest.fixture(autouse=True)
+def approved_throttle_context(approved_test_plan, monkeypatch):
+    from agent import config
+    TEST_PROJECT_ID = "b29b7ca7-17c0-4bde-ade8-c7f458bc2625"
+    monkeypatch.setattr(config, "FLOW_PROJECT_ID", TEST_PROJECT_ID)
+
+
 @pytest.mark.asyncio
 async def test_generation_rpc_is_globally_serialized(monkeypatch):
     monkeypatch.setattr(fc, "FLOW_GENERATION_MAX_CONCURRENT", 1)
@@ -25,8 +32,8 @@ async def test_generation_rpc_is_globally_serialized(monkeypatch):
 
     monkeypatch.setattr(client, "_send", fake_send)
     await asyncio.gather(
-        client.batch_rpc("a", "x", captcha_action=fb.CAPTCHA_VIDEO),
-        client.batch_rpc("b", "y", captcha_action=fb.CAPTCHA_IMAGE),
+        client.batch_rpc(fb.RPC_GEN_IMAGE, fb.image_request("action", fc._config.FLOW_PROJECT_ID), captcha_action=fb.CAPTCHA_VIDEO),
+        client.batch_rpc(fb.RPC_GEN_VIDEO, fb.video_request("action", fc._config.FLOW_PROJECT_ID, "media"), captcha_action=fb.CAPTCHA_IMAGE),
     )
     assert max_active == 1
 
@@ -48,15 +55,15 @@ async def test_unusual_activity_opens_local_circuit_breaker(monkeypatch):
         }
 
     monkeypatch.setattr(client, "_send", fake_send)
-    first = await client.batch_rpc("a", "x", captcha_action=fb.CAPTCHA_VIDEO)
-    second = await client.batch_rpc("b", "y", captcha_action=fb.CAPTCHA_VIDEO)
+    first = await client.batch_rpc(fb.RPC_GEN_IMAGE, fb.image_request("action", fc._config.FLOW_PROJECT_ID), captcha_action=fb.CAPTCHA_VIDEO)
+    second = await client.batch_rpc(fb.RPC_GEN_VIDEO, fb.video_request("action", fc._config.FLOW_PROJECT_ID, "media"), captcha_action=fb.CAPTCHA_VIDEO)
 
     assert first["status"] == 200
     assert second["status"] == 429
     assert "local cooldown active" in second["error"]
     assert calls == 1
     assert client.generation_guard_status["cooldown_active"] is True
-    assert client.generation_guard_status["last_unusual_activity_rpc"] == "a"
+    assert client.generation_guard_status["last_unusual_activity_rpc"] == fb.RPC_GEN_IMAGE
 
 
 @pytest.mark.asyncio
@@ -71,7 +78,7 @@ async def test_non_generation_rpc_bypasses_generation_guard(monkeypatch):
         return {"status": 200, "data": "metadata"}
 
     monkeypatch.setattr(client, "_send", fake_send)
-    result = await client.batch_rpc("meta", "x")
+    result = await client.batch_rpc(fb.RPC_MEDIA, fb.media_request("media"))
     assert result["status"] == 200
     assert calls == 1
 
@@ -81,7 +88,7 @@ async def _unusual(client, monkeypatch):
         return {"status": 200, "data": "PUBLIC_ERROR_UNUSUAL_ACTIVITY"}
 
     monkeypatch.setattr(client, "_send", fake_send)
-    await client.batch_rpc("a", "x", captcha_action=fb.CAPTCHA_IMAGE)
+    await client.batch_rpc(fb.RPC_GEN_IMAGE, fb.image_request("action", fc._config.FLOW_PROJECT_ID), captcha_action=fb.CAPTCHA_IMAGE)
 
 
 @pytest.mark.asyncio
@@ -100,7 +107,7 @@ async def test_unusual_activity_hold_survives_a_restart(monkeypatch, _generation
         return {"status": 200, "data": "ok"}
 
     monkeypatch.setattr(restarted, "_send", fake_send)
-    result = await restarted.batch_rpc("b", "y", captcha_action=fb.CAPTCHA_VIDEO)
+    result = await restarted.batch_rpc(fb.RPC_GEN_VIDEO, fb.video_request("action", fc._config.FLOW_PROJECT_ID, "media"), captcha_action=fb.CAPTCHA_VIDEO)
     assert result["status"] == 429 and calls == 0
     status = restarted.generation_guard_status
     assert status["cooldown_reason"] == "unusual_activity"
@@ -134,7 +141,7 @@ async def test_hijack_sets_a_short_hold(monkeypatch, _generation_hold_path):
         return {"status": 200, "error": "extension_hijack_detected"}
 
     monkeypatch.setattr(client, "_send", fake_send)
-    result = await client.batch_rpc("a", "x", captcha_action=fb.CAPTCHA_IMAGE)
+    result = await client.batch_rpc(fb.RPC_GEN_IMAGE, fb.image_request("action", fc._config.FLOW_PROJECT_ID), captcha_action=fb.CAPTCHA_IMAGE)
     assert result["error"].startswith("[HIJACK]")
     status = client.generation_guard_status
     assert status["cooldown_reason"] == "extension_hijack_detected"

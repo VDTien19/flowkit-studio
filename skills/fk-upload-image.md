@@ -1,5 +1,13 @@
 Upload a local image file to Google Flow and get a media_id (UUID).
 
+Configuration pre-flight: read `docs/AUTOMATION.md` and `GET /api/flow/status`.
+Use the effective `flow_project_id` from the running backend, never an old ID
+from a plan. The user sets the destination in `flowkit-settings.ps1` and restarts
+with `start-flowkit.ps1`. Keep local film UUIDs in queue/management APIs; direct
+Flow calls omit the target or use the effective ID. Never create Google projects
+or override the configured target.
+
+
 Usage: `/fk-upload-image <file_path> [--project <project_id>] [--entity <entity_id>]`
 
 Useful for: setting channel icons, covers, or any local image as an entity reference or scene image.
@@ -17,8 +25,10 @@ curl -s http://127.0.0.1:8100/api/flow/status
 # flow_key_present is a legacy-path signal — false is expected here.
 ```
 
-The upload is scoped to a Flow project: pass `project_id`, or leave it out to
-use the pinned `FLOW_PROJECT_ID`. Without either you get `NO_FLOW_PROJECT`.
+The upload uses the configured Google Flow project: omit `project_id`, or pass
+exactly the effective ID from `/api/flow/status`. Overrides are rejected. A missing
+configuration returns `FLOW_PROJECT_NOT_CONFIGURED`; edit `flowkit-settings.ps1`
+and restart with `start-flowkit.ps1`.
 
 ## Step 2: Upload image
 

@@ -23,8 +23,8 @@ class ProjectCreate(BaseModel):
     language: str = "en"
     user_paygate_tier: PaygateTier = "PAYGATE_TIER_ONE"
     tool_name: str = "PINHOLE"
-    # Optional explicit reuse. When omitted, FlowKit creates a fresh real Flow
-    # project through the current batchexecute endpoint.
+    # Compatibility input: only the pinned Google ID is accepted.
+    # Every film receives an independent local UUID; no Google project is created.
     flow_project_id: Optional[str] = None
     material: str = Field("realistic", pattern=r"^[a-z0-9][a-z0-9_]{1,63}$")  # material ID from GET /api/materials
     style: Optional[str] = None  # deprecated: use material instead; "3D"→"3d_pixar", "photorealistic"→"realistic"

@@ -17,6 +17,7 @@ from agent.api.videos import router as videos_router
 from agent.api.scenes import router as scenes_router
 from agent.api.requests import router as requests_router
 from agent.api.flow import router as flow_router
+from agent.api.automation import router as automation_router
 from agent.api.reviews import router as reviews_router
 from agent.api.tts import router as tts_router
 from agent.api.materials import router as materials_router
@@ -115,6 +116,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Flow Kit", version="1.3.1", lifespan=lifespan)
+app.include_router(automation_router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -136,7 +138,12 @@ _GENERATION_PATHS = {
 @app.middleware("http")
 async def flow_caller_observability(request: Request, call_next):
     """Attribute generation submits without logging prompts, media or secrets."""
-    response = await call_next(request)
+    from agent.services.automation_policy import approved_project
+    token = approved_project.set(request.headers.get("x-flowkit-plan-project"))
+    try:
+        response = await call_next(request)
+    finally:
+        approved_project.reset(token)
     if request.method == "POST" and request.url.path in _GENERATION_PATHS:
         caller = (request.headers.get("x-flowkit-caller") or "unknown")[:80]
         logger.info(

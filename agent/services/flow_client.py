@@ -26,7 +26,7 @@ from typing import Optional
 
 from agent.config import (
     VIDEO_MODELS,
-    FLOW_PROJECT_ID, FLOW_ALLOW_DEGRADED,
+    FLOW_ALLOW_DEGRADED,
     DEFAULT_PAYGATE_TIER,
     FLOW_GENERATION_MIN_INTERVAL_S, FLOW_GENERATION_MAX_CONCURRENT,
     FLOW_UNUSUAL_ACTIVITY_COOLDOWN_S, FLOW_GENERATION_HOLD_PATH,
@@ -497,6 +497,13 @@ class FlowClient:
         must check result.get("error") or use _is_ws_error() before reading data.
         Never raises; exceptions are caught and returned as error dicts.
         """
+        from agent.services.automation_policy import validate_rpc, PolicyError
+        try:
+            if method != "batch_rpc":
+                raise PolicyError("FLOW_TRANSPORT_DISABLED: only validated batch RPC is allowed")
+            validate_rpc(params["rpcid"], params["freq"])
+        except (PolicyError, ValueError, KeyError) as exc:
+            return {"status": 409, "error": str(exc)}
         if not self.connected:
             return {"error": "Extension not connected"}
 
@@ -569,6 +576,11 @@ class FlowClient:
         so direct API callers cannot accidentally bypass the worker limiter.
         Non-generation RPCs (polling/media/project metadata) remain unthrottled.
         """
+        from agent.services.automation_policy import validate_rpc, PolicyError
+        try:
+            validate_rpc(rpcid, freq)
+        except (PolicyError, ValueError) as exc:
+            return {"status": 409, "error": str(exc)}
         params: dict = {"rpcid": rpcid, "freq": freq}
         if captcha_action:
             params["captchaAction"] = captcha_action
@@ -669,21 +681,8 @@ class FlowClient:
         return fb.first_payload(result.get("data") or "", rpcid)
 
     def _batch_project_id(self, project_id: str) -> str:
-        """The Flow project an RPC is scoped to.
-
-        Flow Kit stores the Flow project uuid as the local project id. Public
-        direct endpoints resolve project-less work through the persistent
-        session-project lease before reaching this lower-level helper. The
-        legacy FLOW_PROJECT_ID fallback remains for older internal callers.
-        """
-        if project_id and self._UUID_RE.match(str(project_id)):
-            return str(project_id)
-        if FLOW_PROJECT_ID:
-            return FLOW_PROJECT_ID
-        raise fb.FlowBatchError(
-            "NO_FLOW_PROJECT: every batchexecute call is scoped to a Flow project. "
-            "Create one in the Flow UI and pin its uuid as FLOW_PROJECT_ID."
-        )
+        from agent.services.automation_policy import flow_target
+        return flow_target(project_id)
 
     def _batch_image_model(self, override: str | None = None) -> str:
         # Read through the module: PATCH /api/models hot-reloads both of these.
@@ -712,28 +711,11 @@ class FlowClient:
     # ─── High-Level Batch Methods ────────────────────────────────
 
     def flow_project_id(self, requested: str | None = None) -> str | None:
-        """Validate an explicitly requested Flow project id."""
-        if requested and self._UUID_RE.match(requested):
-            return requested
-        return None
+        from agent.services.automation_policy import flow_target
+        return flow_target(requested)
 
     async def create_project(self, project_title: str, tool_name: str = "PINHOLE") -> dict:
-        try:
-            result = await self.batch_rpc(
-                fb.RPC_CREATE_PROJECT,
-                fb.create_project_request(project_title),
-                timeout=60,
-            )
-            if result.get("error"):
-                return {"status": result.get("status", 502), "error": result["error"]}
-            payload = fb.first_payload(result.get("data") or "", fb.RPC_CREATE_PROJECT)
-            pid, title = fb.read_created_project(payload)
-            if not self._UUID_RE.match(pid):
-                raise fb.FlowBatchError(f"invalid project id returned by Flow: {pid!r}")
-            logger.info("Flow project created: %s title=%r", pid, title or project_title)
-            return {"status": 200, "data": {"projectId": pid, "title": title or project_title}}
-        except Exception as exc:
-            return _batch_error(exc)
+        return {"status": 409, "error": "FLOW_PROJECT_CREATION_DISABLED"}
 
     async def generate_images(self, prompt: str, project_id: str = None,
                                 character_media_ids: list[str] = None,
@@ -871,7 +853,7 @@ class FlowClient:
         """Return Flow's synchronous 2K/4K image upscale as base64 JPEG data."""
         try:
             pid = self._batch_project_id(project_id)
-            freq = fb.image_upscale_request(media_id, resolution)
+            freq = fb.image_upscale_request(media_id, resolution, project_id=pid)
             payload = await self._batch_payload(
                 fb.RPC_UPSCALE_IMAGE,
                 freq,
@@ -1035,7 +1017,7 @@ class FlowClient:
         rounds = self._operation_polls.get(operation_id, 0) + 1
         self._operation_polls[operation_id] = rounds
 
-        project_id = self._operation_projects.get(operation_id) or FLOW_PROJECT_ID
+        project_id = self._operation_projects.get(operation_id) or _config.FLOW_PROJECT_ID
         if not project_id:
             try:
                 from agent.db import crud

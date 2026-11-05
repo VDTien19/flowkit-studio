@@ -28,8 +28,11 @@ page can sign a Flow request, so nothing works headless.
 Flow lives at `flow.google.com` and signs every call in the page. Consequences
 that change how you work:
 
-- **Projects are not created by Flow Kit any more.** Make one in the Flow UI and
-  pin its uuid as `FLOW_PROJECT_ID`, or pass `flow_project_id` to `POST /api/projects`.
+- **Google projects are never created by FlowKit.** Set `FLOW_PROJECT_ID` in
+  `flowkit-settings.ps1` and restart using `start-flowkit.ps1`. Read `/api/flow/status`
+  for the effective ID; never reuse a historical ID from a plan. `POST /api/projects`
+  creates independent local film records; its optional `flow_project_id` must match
+  the current configuration. See `docs/AUTOMATION.md` for approval and restart rules.
 - **Three capabilities are unported**, all on the Veo path, because their
   payloads were never captured: **video** upscale (not image export, which
   works), Veo r2v, and Veo start+end-frame chaining. They fail with

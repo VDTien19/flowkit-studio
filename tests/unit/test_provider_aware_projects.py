@@ -63,8 +63,8 @@ async def test_create_project_with_explicit_flow_id_no_extension(
 
     r = projects_client.post("/api/projects",
                              json={"name": "Reuse", "flow_project_id": fid})
-    assert r.status_code == 200, r.text
-    assert r.json()["id"] == fid
+    assert r.status_code == 409, r.text
+    assert "FLOW_PROJECT_MISMATCH" in r.text
 
 
 async def test_refresh_urls_noop_for_local_media(flow_client, test_db,

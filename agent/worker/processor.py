@@ -350,6 +350,11 @@ async def _process_one(req: dict, deferred: dict = None, retry_after: dict = Non
 
 async def _dispatch(req: dict, orientation: str) -> dict:
     """Route request to the appropriate OperationService method."""
+    from agent.services.automation_policy import require_approval, PolicyError
+    try:
+        require_approval(req.get("project_id"))
+    except PolicyError as exc:
+        return {"status": 409, "error": str(exc)}
     from agent.sdk.services.operations import get_operations
     ops = get_operations()
     req_type, rid = req["type"], req["id"]
@@ -414,7 +419,8 @@ async def _reupload_media(url: str, project_id: str) -> str | None:
         mime = content_type.split(";")[0].strip()
 
         client = get_flow_client()
-        result = await client.upload_image(image_b64, mime_type=mime, project_id=project_id)
+        from agent.services.automation_policy import flow_target
+        result = await client.upload_image(image_b64, mime_type=mime, project_id=flow_target())
         new_mid = result.get("_mediaId")
         if new_mid:
             logger.info("Re-upload OK: fresh media_id=%s", new_mid[:20])
@@ -527,7 +533,10 @@ async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict =
 
     # A capability the batch path does not have, or a missing Flow project, is
     # a configuration answer — not something a retry can reach. Fail it once.
-    if "unsupported_on_batch_api" in error_lower or "no_flow_project" in error_lower:
+    if any(code in error_lower for code in (
+        "unsupported_on_batch_api", "no_flow_project", "flow_project_",
+        "flow_rpc_", "approval_required", "plan_required", "plan_changed",
+    )):
         await crud.update_request(rid, status="FAILED", error_message=str(error_msg))
         await _mark_scene_failed(req)
         logger.error("Request %s FAILED (not retryable): %s", rid[:8], error_msg)

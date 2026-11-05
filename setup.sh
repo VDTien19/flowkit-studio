@@ -97,10 +97,20 @@ fi
 
 # ─── Activate & install ─────────────────────────────────────
 echo "Installing Python dependencies..."
-source venv/bin/activate
-pip install -q --upgrade pip
-pip install -q -r requirements.txt
-echo "  Installed: $(pip list --format=columns | grep -cE 'fastapi|uvicorn|aiosqlite|websockets|pydantic|aiohttp|httpx') packages"
+
+if [ -f "venv/Scripts/activate" ]; then
+    source venv/Scripts/activate
+elif [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+else
+    echo "ERROR: Cannot find virtual environment activation script"
+    exit 1
+fi
+
+python -m pip install -q --upgrade pip
+python -m pip install -q -r requirements.txt
+
+echo "  Installed: $(python -m pip list --format=columns | grep -cE 'fastapi|uvicorn|aiosqlite|websockets|pydantic|aiohttp|httpx') packages"
 
 # ─── Verify import ──────────────────────────────────────────
 echo "Verifying agent can import..."

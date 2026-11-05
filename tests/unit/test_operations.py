@@ -22,7 +22,7 @@ CHAR_ID = "char-001"
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton():
+def reset_singleton(approved_test_plan):
     """Reset the module-level _ops singleton between tests."""
     ops_module._ops = None
     yield
@@ -100,7 +100,7 @@ class TestGenerateSceneImage:
         call_kwargs = mock_client.generate_images.call_args.kwargs
         assert call_kwargs["aspect_ratio"] == "IMAGE_ASPECT_RATIO_PORTRAIT"
         assert call_kwargs["prompt"] == base_scene["prompt"]
-        assert call_kwargs["project_id"] == PROJECT_ID
+        assert call_kwargs["project_id"] == "b29b7ca7-17c0-4bde-ade8-c7f458bc2625"
         assert "data" in result
 
     @pytest.mark.asyncio

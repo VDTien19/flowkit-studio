@@ -156,8 +156,6 @@ async def create(body: ProjectCreate):
     from agent.materials import get_material
     import uuid as _uuid
 
-    client = get_flow_client()
-
     # Resolve material (support legacy style field + material field)
     material_id = _resolve_material_id(body.material)
     material = get_material(material_id)
@@ -172,31 +170,18 @@ async def create(body: ProjectCreate):
             dupes = [s for s in slugs if slugs.count(s) > 1]
             raise HTTPException(400, f"Duplicate character slugs: {list(set(dupes))}")
 
-    # Provider-aware project identity.
-    # 1. Explicit flow_project_id -> intentional reuse (no extension needed).
-    # 2. Extension connected -> create a fresh real Flow project (legacy path).
-    # 3. Otherwise -> local-only project with a minted UUID. This is the
-    #    assistant-mode path: no Chrome, no Flow sign-in required. Generation
-    #    requests for it should use a non-flow provider.
+    # Film projects are local records. Google Flow always uses the pinned ID.
+    from agent.services.automation_policy import flow_target, PolicyError
+    try:
+        flow_target(body.flow_project_id)
+    except PolicyError as exc:
+        raise HTTPException(409, str(exc)) from exc
     detected_tier = body.user_paygate_tier
-    flow_project_id = client.flow_project_id(body.flow_project_id)
-    if flow_project_id:
-        logger.info("Flow project reused: %s", flow_project_id)
-    elif client.connected:
-        detected_tier = await _detect_user_tier(client)
-        flow_result = await client.create_project(body.name, body.tool_name)
-        if flow_result.get("error"):
-            raise HTTPException(502, f"Flow API error: {flow_result['error']}")
-        flow_project_id = _read_flow_project_id(flow_result)
-        logger.info("Flow project created: %s", flow_project_id)
-    else:
-        flow_project_id = str(_uuid.uuid4())
-        logger.info("Extension not connected — creating local-only project %s",
-                    flow_project_id)
+    local_project_id = str(_uuid.uuid4())
 
     repo = _get_repo()
 
-    # Step 2: Create local project with the Flow-assigned ID and detected tier
+    # Step 2: Create an independent local film project
     create_data = body.model_dump(exclude_none=True)
     create_data.pop("tool_name", None)
     create_data.pop("flow_project_id", None)
@@ -204,7 +189,7 @@ async def create(body: ProjectCreate):
     characters_input = create_data.pop("characters", None)
 
     project = await repo.create_project(
-        id=flow_project_id,
+        id=local_project_id,
         name=create_data["name"],
         description=create_data.get("description"),
         story=create_data.get("story"),
@@ -237,7 +222,7 @@ async def create(body: ProjectCreate):
                 image_prompt=image_prompt,
                 voice_description=char_input.get("voice_description"),
             )
-            await repo.link_character_to_project(flow_project_id, char.id)
+            await repo.link_character_to_project(local_project_id, char.id)
             logger.info("%s '%s' created and linked: %s", etype, char_input["name"], char.id)
 
     return project

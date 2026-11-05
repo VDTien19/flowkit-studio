@@ -3,6 +3,10 @@
 
 Base URL: `http://127.0.0.1:8100`
 
+## Persistent automation policy
+
+Before any video work, read and follow `docs/AUTOMATION.md`. This policy takes precedence over older skill instructions. The user selects Google Flow's destination in `flowkit-settings.ps1` (`FLOW_PROJECT_ID`), loaded by `start-flowkit.ps1` on restart. Always read `/api/flow/status` for the effective ID; never copy a historical ID from a plan or document. Never create Google projects or override the configured ID. Local film projects remain independent. A short Vietnamese idea starts planning only, with no paid calls. Present one complete plan and wait for the user's `DUYỆT`; only then record approval and run the approved pipeline through final MP4 without repeated routine questions.
+
 ## Pre-flight
 
 Before ANY workflow:

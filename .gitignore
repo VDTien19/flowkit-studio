@@ -11,6 +11,11 @@ output/
 youtube/channels/
 agent/active_project.json
 
+# Python cache
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
 # Generated AI tool configs (run: python setup.py)
 .claude/commands/fk-*
 .agents/skills/fk-*
@@ -35,3 +40,4 @@ flow_session_project.json
 scratch/
 
 series_manifest.json
+automation_plans.db*

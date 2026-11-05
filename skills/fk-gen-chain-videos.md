@@ -1,5 +1,13 @@
 Generate videos with automatic scene chaining (start+end frame transitions).
 
+Configuration pre-flight: read `docs/AUTOMATION.md` and `GET /api/flow/status`.
+Use the effective `flow_project_id` from the running backend, never an old ID
+from a plan. The user sets the destination in `flowkit-settings.ps1` and restarts
+with `start-flowkit.ps1`. Keep local film UUIDs in queue/management APIs; direct
+Flow calls omit the target or use the effective ID. Never create Google projects
+or override the configured target.
+
+
 Usage: `/gen-chain-videos <project_id> <video_id>`
 
 ## Provider (optional)

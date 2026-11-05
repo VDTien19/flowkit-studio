@@ -413,7 +413,8 @@ def stream_chat_request(prompt: str, project_id: str, client_uuid: str | None = 
     return json.dumps([None, json.dumps(inner, separators=(",", ":"), ensure_ascii=False)], separators=(",", ":"), ensure_ascii=False)
 
 
-def image_upscale_request(media_id: str, resolution: str = "2K") -> str:
+def image_upscale_request(media_id: str, resolution: str = "2K", *,
+                          project_id: str | None = None) -> str:
     """Build the current FlowService.UpsampleImage request (RPC SPrCad)."""
     key = str(resolution).strip().upper()
     if key.startswith("UPSAMPLE_IMAGE_RESOLUTION_"):
@@ -422,7 +423,7 @@ def image_upscale_request(media_id: str, resolution: str = "2K") -> str:
         code = IMAGE_UPSCALE_RESOLUTIONS[key]
     except KeyError:
         raise ValueError("image upscale resolution must be 2K or 4K") from None
-    return build_envelope(RPC_UPSCALE_IMAGE, [media_id, code, _context(None)])
+    return build_envelope(RPC_UPSCALE_IMAGE, [media_id, code, _context(project_id)])
 
 
 def video_request(prompt: str, project_id: str, source_media_id: str,

@@ -12,7 +12,7 @@ from agent.services import flow_batch as fb
 from agent.services.flow_client import FlowClient
 from agent.worker._parsing import _extract_media_id, _extract_output_url, _is_error
 
-PROJECT = "11111111-2222-3333-4444-555555555555"
+PROJECT = "b29b7ca7-17c0-4bde-ade8-c7f458bc2625"
 MEDIA = "12345678-1234-1234-1234-1234567890ab"
 OPERATION = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 IMAGE_URL = f"https://{fb.MEDIA_HOST}/image/{MEDIA}?sig=x"
@@ -32,7 +32,7 @@ def client(monkeypatch):
     envelope as well as on what came back.
     """
     import agent.services.flow_client as module
-    monkeypatch.setattr(module, "FLOW_PROJECT_ID", PROJECT)
+    monkeypatch.setattr(module._config, "FLOW_PROJECT_ID", PROJECT)
     monkeypatch.setattr(module, "FLOW_ALLOW_DEGRADED", False)
 
     c = FlowClient()
@@ -189,7 +189,7 @@ class TestGenerateImages:
 
     async def test_a_project_less_call_falls_back_to_the_pinned_project(self, client):
         client.responses[fb.RPC_GEN_IMAGE] = {"data": envelope(fb.RPC_GEN_IMAGE, [[IMAGE_URL]])}
-        await client.generate_images("a cat", "0")
+        await client.generate_images("a cat", "")
 
         item = json.loads(json.loads(client.calls[0]["freq"])[0][0][1])[1][0]
         assert item[7][5] == PROJECT
@@ -205,9 +205,9 @@ class TestGenerateImages:
 
     async def test_no_project_anywhere_is_a_named_failure(self, client, monkeypatch):
         import agent.services.flow_client as module
-        monkeypatch.setattr(module, "FLOW_PROJECT_ID", "")
+        monkeypatch.setattr(module._config, "FLOW_PROJECT_ID", "")
         result = await client.generate_images("a cat", "0")
-        assert "NO_FLOW_PROJECT" in result["error"]
+        assert "FLOW_PROJECT_NOT_CONFIGURED" in result["error"]
 
 
 class TestEditImage:
@@ -442,22 +442,18 @@ class TestMediaAndUpload:
 
 
 class TestProjectAndCredits:
-    async def test_create_project_uses_current_batch_rpc(self, client):
-        client.responses[fb.RPC_CREATE_PROJECT] = {
-            "data": envelope(fb.RPC_CREATE_PROJECT, [PROJECT, ["My Film"]])
-        }
+    async def test_create_google_project_is_disabled(self, client):
         result = await client.create_project("My Film")
-        assert result["data"]["projectId"] == PROJECT
-        assert result["data"]["title"] == "My Film"
-        assert client.calls[0]["rpcid"] == fb.RPC_CREATE_PROJECT
-        outer = json.loads(client.calls[0]["freq"])
-        inner = json.loads(outer[0][0][1])
-        assert inner == ["projects/*", [None, ["My Film"]], [None, fb.SURFACE_ID]]
+        assert result["status"] == 409
+        assert result["error"] == "FLOW_PROJECT_CREATION_DISABLED"
+        assert not client.calls
 
-    async def test_flow_project_id_only_accepts_explicit_ids(self, client):
+    async def test_flow_project_id_is_permanently_pinned(self, client):
+        from agent.services.automation_policy import PolicyError
         assert client.flow_project_id(PROJECT) == PROJECT
-        assert client.flow_project_id("") is None
-        assert client.flow_project_id("not-a-project") is None
+        assert client.flow_project_id("") == PROJECT
+        with pytest.raises(PolicyError, match="MISMATCH"):
+            client.flow_project_id("not-a-project")
 
     async def test_credits_answers_the_configured_tier_rather_than_guessing(self, client):
         result = await client.get_credits()
